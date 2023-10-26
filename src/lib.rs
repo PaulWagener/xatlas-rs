@@ -91,38 +91,38 @@ pub struct ChartOptions {
 
 pub struct PackOptions {
     /// Charts larger than this will be scaled down. 0 means no limit.
-    max_chart_size: u32,
+    pub max_chart_size: u32,
 
     /// Number of pixels to pad charts with.
-    padding: u32,
+    pub padding: u32,
 
     /// Unit to texel scale. e.g. a 1x1 quad with texels_per_unit of 32 will take up approximately 32x32 texels in the atlas.
     /// If 0, an estimated value will be calculated to approximately match the given resolution.
     /// If resolution is also 0, the estimated value will approximately match a 1024x1024 atlas.
-    texels_per_unit: f32,
+    pub texels_per_unit: f32,
 
     /// If 0, generate a single atlas with texels_per_unit determining the final resolution.
     /// If not 0, and texels_per_unit is not 0, generate one or more atlases with that exact resolution.
     /// If not 0, and texels_per_unit is 0, texels_per_unit is estimated to approximately match the resolution.
-    resolution: u32,
+    pub resolution: u32,
 
     /// Leave space around charts for texels that would be sampled by bilinear filtering.
-    bilinear: bool,
+    pub bilinear: bool,
 
     /// Align charts to 4x4 blocks. Also improves packing speed, since there are fewer possible chart locations to consider.
-    block_align: bool,
+    pub block_align: bool,
 
     /// Slower, but gives the best result. If false, use random chart placement.
-    brute_force: bool,
+    pub brute_force: bool,
 
     /// Create Atlas::image
-    create_image: bool,
+    pub create_image: bool,
 
     /// Rotate charts to the axis of their convex hull.
-    rotate_charts_to_axis: bool,
+    pub rotate_charts_to_axis: bool,
 
     /// Rotate charts to improve packing.
-    rotate_charts: bool,
+    pub rotate_charts: bool,
 }
 
 pub enum ProgressCategory {
@@ -194,6 +194,33 @@ impl<'x> Xatlas<'x> {
 
     pub fn texels_per_unit(&self) -> f32 {
         unsafe { *self.handle }.texelsPerUnit
+    }
+
+    pub fn utilization(&self) -> Option<&'x [f32]> {
+        unsafe {
+            if (*self.handle).utilization.is_null() {
+                None
+            } else {
+                Some(slice::from_raw_parts(
+                    (*self.handle).utilization,
+                    (*self.handle).atlasCount as usize,
+                ))
+            }
+        }
+    }
+
+    pub fn image(&self) -> Option<&'x [u32]> {
+        unsafe {
+            if (*self.handle).image.is_null() {
+                None
+            } else {
+                Some(slice::from_raw_parts(
+                    (*self.handle).image,
+                    ((*self.handle).atlasCount * (*self.handle).width * (*self.handle).height)
+                        as usize,
+                ))
+            }
+        }
     }
 
     pub fn meshes(&self) -> Vec<Mesh<'x>> {
