@@ -3,6 +3,7 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use crate::root::xatlas;
+use crate::root::xatlas::{IndexFormat_UInt16, IndexFormat_UInt32};
 use std::marker::{PhantomData, PhantomPinned};
 use std::os::fd::AsFd;
 use std::ptr::slice_from_raw_parts;
@@ -14,43 +15,46 @@ pub struct Xatlas<'x> {
     phantom: PhantomData<&'x ()>,
 }
 
-#[derive(Debug, Default)]
-pub enum IndexFormat {
-    #[default]
-    UInt16,
-    UInt32,
+#[derive(Debug)]
+pub enum MeshData<'a> {
+    Contiguous(&'a [f32]),
+    WithStride { data: &'a [u8], stride: u32 },
+}
+
+#[derive(Debug)]
+pub enum IndexData<'a> {
+    U16(&'a [u16]),
+    U32(&'a [u32]),
 }
 
 #[derive(Debug)]
 pub struct MeshDecl<'a> {
-    pub vertex_position_data: &'a [u8],
-    pub vertex_normal_data: Option<&'a [u8]>,
-    pub vertex_uv_data: Option<&'a [u8]>,
-    pub index_data: Option<&'a [u8]>,
+    pub vertex_position_data: MeshData<'a>,
+    pub vertex_normal_data: Option<MeshData<'a>>,
+    /// The input UVs are provided as a hint to the chart generator.
+    pub vertex_uv_data: Option<MeshData<'a>>,
+
     pub face_ignore_data: Option<bool>,
-    pub face_material_data: Option<u32>,
-    pub face_vertex_count: Option<u8>,
-    pub vertex_count: u32,
-    pub vertex_position_stride: u32,
-    pub vertex_normal_stride: u32,
-    pub vertex_uv_stride: u32,
-    pub index_count: u32,
-    pub index_offset: i32,
+    /// Must be faceCount in length.
+    /// Only faces with the same material will be assigned to the same chart.
+    pub face_material_data: Option<&'a [u32]>,
+
+    /// Must be faceCount in length.
+    /// Polygon / n-gon support. Faces are assumed to be triangles if this is null.
+    pub face_vertex_count: Option<&'a [u8]>,
+
+    pub index_data: Option<IndexData<'a>>,
+
+    /// if faceVertexCount is null. Otherwise assumed to be indexCount / 3.
     pub face_count: u32,
-    pub index_format: IndexFormat,
     pub epsilon: f32,
 }
 
 pub struct UvMeshDecl<'a> {
-    pub vertex_uv_data: &'a [u8],
-    pub index_data: Option<&'a [u8]>,
-    pub face_material_data: Option<u32>,
-
-    pub vertex_count: u32,
-    pub vertex_stride: u32,
-    pub index_count: u32,
-    pub index_offset: i32,
-    pub index_format: IndexFormat,
+    pub vertex_uv_data: Option<MeshData<'a>>,
+    ///Overlapping UVs should be assigned a different material. Must be indexCount / 3 in length.
+    pub face_material_data: Option<&'a [u32]>,
+    pub index_data: Option<IndexData<'a>>,
 }
 
 #[derive(Debug)]
@@ -281,15 +285,15 @@ impl<'x> Xatlas<'x> {
     ) -> Result<(), AddMeshError> {
         let decl = xatlas::MeshDecl {
             vertexPositionData: mesh_decl.vertex_position_data.as_ptr() as _,
-            vertexNormalData: match mesh_decl.vertex_normal_data {
+            vertexNormalData: match &mesh_decl.vertex_normal_data {
                 None => std::ptr::null(),
                 Some(d) => d.as_ptr() as _,
             },
-            vertexUvData: match mesh_decl.vertex_uv_data {
+            vertexUvData: match &mesh_decl.vertex_uv_data {
                 None => std::ptr::null(),
                 Some(d) => d.as_ptr() as _,
             },
-            indexData: match mesh_decl.index_data {
+            indexData: match &mesh_decl.index_data {
                 None => std::ptr::null(),
                 Some(d) => d.as_ptr() as _,
             },
@@ -299,20 +303,29 @@ impl<'x> Xatlas<'x> {
             },
             faceMaterialData: match mesh_decl.face_material_data {
                 None => std::ptr::null(),
-                Some(ref d) => d,
+                Some(ref d) => d.as_ptr(),
             },
             faceVertexCount: match mesh_decl.face_vertex_count {
                 None => std::ptr::null(),
-                Some(ref d) => d,
+                Some(ref d) => d.as_ptr(),
             },
-            vertexCount: mesh_decl.vertex_count,
-            vertexPositionStride: mesh_decl.vertex_position_stride,
-            vertexNormalStride: mesh_decl.vertex_normal_stride,
-            vertexUvStride: mesh_decl.vertex_uv_stride,
-            indexCount: mesh_decl.index_count,
-            indexOffset: mesh_decl.index_offset,
+            vertexCount: mesh_decl.vertex_position_data.count(),
+            vertexPositionStride: mesh_decl.vertex_position_data.stride(3),
+            vertexNormalStride: mesh_decl
+                .vertex_normal_data
+                .as_ref()
+                .map_or(0, |c| c.stride(3)),
+            vertexUvStride: mesh_decl.vertex_uv_data.as_ref().map_or(0, |d| d.stride(2)),
+            indexCount: mesh_decl.index_data.as_ref().map_or(0, |d| d.count()),
+            indexOffset: 0,
             faceCount: mesh_decl.face_count,
-            indexFormat: convert_index_format(&mesh_decl.index_format),
+            indexFormat: mesh_decl
+                .index_data
+                .as_ref()
+                .map_or(IndexFormat_UInt16, |d| match d {
+                    IndexData::U16(_) => IndexFormat_UInt16,
+                    IndexData::U32(_) => IndexFormat_UInt32,
+                }),
             epsilon: mesh_decl.epsilon,
         };
 
@@ -327,20 +340,38 @@ impl<'x> Xatlas<'x> {
 
     pub fn add_uv_mesh(&mut self, decl: &UvMeshDecl<'x>) -> Result<(), AddMeshError> {
         let decl = xatlas::UvMeshDecl {
-            vertexUvData: decl.vertex_uv_data.as_ptr() as _,
-            indexData: match decl.index_data {
+            vertexUvData: match &decl.vertex_uv_data {
+                None => std::ptr::null(),
+                Some(d) => d.as_ptr() as _,
+            },
+            indexData: match &decl.index_data {
                 None => std::ptr::null(),
                 Some(d) => d.as_ptr() as _,
             },
             faceMaterialData: match decl.face_material_data {
                 None => std::ptr::null(),
-                Some(ref d) => d,
+                Some(ref d) => d.as_ptr(),
             },
-            vertexCount: decl.vertex_count,
-            vertexStride: decl.vertex_stride,
-            indexCount: decl.index_count,
-            indexOffset: decl.index_offset,
-            indexFormat: convert_index_format(&decl.index_format),
+            vertexCount: match &decl.vertex_uv_data {
+                None => 0,
+                Some(d) => d.count(),
+            },
+            vertexStride: match &decl.vertex_uv_data {
+                None => 0,
+                Some(d) => d.stride(2),
+            },
+            indexCount: match &decl.index_data {
+                None => 0,
+                Some(d) => d.count(),
+            },
+            indexOffset: 0,
+            indexFormat: match decl.index_data {
+                None => IndexFormat_UInt16,
+                Some(ref d) => match d {
+                    IndexData::U16(_) => IndexFormat_UInt16,
+                    IndexData::U32(_) => IndexFormat_UInt32,
+                },
+            },
         };
         let result = unsafe { xatlas::AddUvMesh(self.handle, &decl) };
 
@@ -378,13 +409,6 @@ fn add_mesh_error_result(add_mesh_error: xatlas::AddMeshError) -> Result<(), Add
         xatlas::AddMeshError_InvalidFaceVertexCount => Err(AddMeshError::InvalidFaceVertexCount),
         xatlas::AddMeshError_InvalidIndexCount => Err(AddMeshError::InvalidIndexCount),
         _ => unreachable!(),
-    }
-}
-
-fn convert_index_format(index_format: &IndexFormat) -> xatlas::IndexFormat {
-    match index_format {
-        IndexFormat::UInt16 => xatlas::IndexFormat_UInt16,
-        IndexFormat::UInt32 => xatlas::IndexFormat_UInt32,
     }
 }
 
@@ -462,23 +486,55 @@ impl Default for PackOptions {
 impl Default for MeshDecl<'_> {
     fn default() -> Self {
         MeshDecl {
-            vertex_position_data: &[],
+            vertex_position_data: MeshData::Contiguous(&[]),
             vertex_normal_data: None,
             vertex_uv_data: None,
             index_data: None,
             face_ignore_data: None,
             face_material_data: None,
             face_vertex_count: None,
-            vertex_count: 0,
-            vertex_position_stride: 0,
-            vertex_normal_stride: 0,
-            vertex_uv_stride: 0,
-            index_count: 0,
-            index_offset: 0,
             face_count: 0,
-            index_format: Default::default(),
             epsilon: 1.192092896e-07f32,
         }
+    }
+}
+
+impl MeshData<'_> {
+    fn as_ptr(&self) -> *const u8 {
+        match self {
+            MeshData::Contiguous(d) => d.as_ptr() as _,
+            MeshData::WithStride { data, .. } => data.as_ptr(),
+        }
+    }
+
+    fn stride(&self, num: u32) -> u32 {
+        match self {
+            MeshData::Contiguous(_) => num * std::mem::size_of::<f32>() as u32,
+            MeshData::WithStride { stride, .. } => *stride,
+        }
+    }
+
+    fn count(&self) -> u32 {
+        match self {
+            MeshData::Contiguous(d) => (d.len() / 3) as u32,
+            MeshData::WithStride { data, stride, .. } => data.len() as u32 / stride,
+        }
+    }
+}
+
+impl IndexData<'_> {
+    fn as_ptr(&self) -> *const u8 {
+        match self {
+            IndexData::U16(d) => d.as_ptr() as _,
+            IndexData::U32(d) => d.as_ptr() as _,
+        }
+    }
+
+    fn count(&self) -> u32 {
+        (match self {
+            IndexData::U16(d) => d.len(),
+            IndexData::U32(d) => d.len(),
+        }) as _
     }
 }
 
