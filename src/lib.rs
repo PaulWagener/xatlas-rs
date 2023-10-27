@@ -134,9 +134,9 @@ pub enum ProgressCategory {
 
 #[derive(Debug)]
 pub struct Mesh<'a> {
-    index_array: &'a [u32],
-    chart_array: Vec<Chart<'a>>,
-    vertex_array: Vec<Vertex>,
+    pub index_array: &'a [u32],
+    pub chart_array: Vec<Chart<'a>>,
+    pub vertex_array: Vec<Vertex>,
 }
 
 #[derive(Debug)]
