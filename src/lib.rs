@@ -211,7 +211,7 @@ impl<'x> Xatlas<'x> {
         unsafe { *self.handle }.texelsPerUnit
     }
 
-    pub fn utilization(&self) -> Option<&'x [f32]> {
+    pub fn utilization(&'x self) -> Option<&'x [f32]> {
         unsafe {
             if (*self.handle).utilization.is_null() {
                 None
@@ -224,7 +224,7 @@ impl<'x> Xatlas<'x> {
         }
     }
 
-    pub fn image(&self) -> Option<&'x [u32]> {
+    pub fn image(&'x self) -> Option<&'x [u32]> {
         unsafe {
             if (*self.handle).image.is_null() {
                 None
@@ -238,7 +238,7 @@ impl<'x> Xatlas<'x> {
         }
     }
 
-    pub fn meshes(&self) -> Vec<Mesh<'x>> {
+    pub fn meshes(&'x self) -> Vec<Mesh<'x>> {
         unsafe { slice::from_raw_parts((*self.handle).meshes, (*self.handle).meshCount as usize) }
             .iter()
             .map(|mesh| {
