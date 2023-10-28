@@ -4,10 +4,9 @@ use std::path::PathBuf;
 fn main() {
     cc::Build::new()
         .file("vendor/source/xatlas/xatlas.cpp")
-        .flag("-std=c++11")
+        .std("c++11")
         .cpp(true)
         .warnings(false)
-        .debug(false)
         .compile("xatlas");
 
     bindgen::builder()
