@@ -183,12 +183,12 @@ impl<'x> Xatlas<'x> {
         Self {
             handle: unsafe { xatlas::Create() },
             progress_callback: None,
-            phantom: PhantomData::default(),
+            phantom: PhantomData,
         }
     }
 
     pub fn width(&self) -> u32 {
-        unsafe { *self.handle }.height
+        unsafe { *self.handle }.width
     }
 
     pub fn height(&self) -> u32 {
@@ -314,11 +314,11 @@ impl<'x> Xatlas<'x> {
             },
             faceMaterialData: match mesh_decl.face_material_data {
                 None => std::ptr::null(),
-                Some(ref d) => d.as_ptr(),
+                Some(d) => d.as_ptr(),
             },
             faceVertexCount: match mesh_decl.face_vertex_count {
                 None => std::ptr::null(),
-                Some(ref d) => d.as_ptr(),
+                Some(d) => d.as_ptr(),
             },
             vertexCount: mesh_decl.vertex_position_data.count(),
             vertexPositionStride: mesh_decl.vertex_position_data.stride(3),
@@ -361,7 +361,7 @@ impl<'x> Xatlas<'x> {
             },
             faceMaterialData: match decl.face_material_data {
                 None => std::ptr::null(),
-                Some(ref d) => d.as_ptr(),
+                Some(d) => d.as_ptr(),
             },
             vertexCount: match &decl.vertex_uv_data {
                 None => 0,
@@ -478,6 +478,12 @@ impl ChartOptions {
     }
 }
 
+impl Default for Xatlas<'_> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Default for ChartOptions {
     fn default() -> Self {
         ChartOptions {
@@ -542,7 +548,7 @@ impl Default for MeshDecl<'_> {
             face_material_data: None,
             face_vertex_count: None,
             face_count: 0,
-            epsilon: 1.192092896e-07f32,
+            epsilon: 1.1920929e-7f32,
         }
     }
 }
