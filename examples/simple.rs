@@ -16,6 +16,10 @@ fn main() {
     };
 
     let mut atlas = Xatlas::new();
+    atlas.set_progress_callback(move |category, progress| {
+        println!("Progress: {category:?} {progress}");
+        true
+    });
     atlas.add_mesh(&mesh).unwrap();
     atlas.generate(&Default::default(), &Default::default());
     let meshes = atlas.meshes();

@@ -4,14 +4,17 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use crate::root::xatlas;
 use crate::root::xatlas::{IndexFormat_UInt16, IndexFormat_UInt32};
+use std::ffi::c_void;
 use std::marker::{PhantomData, PhantomPinned};
+use std::ops::Deref;
 use std::os::fd::AsFd;
+use std::pin::Pin;
 use std::ptr::slice_from_raw_parts;
-use std::slice;
+use std::{mem, slice};
 
-#[derive(Debug)]
 pub struct Xatlas<'x> {
     handle: *mut xatlas::Atlas,
+    progress_callback: Option<ProgressCallbackPointer>,
     phantom: PhantomData<&'x ()>,
 }
 
@@ -129,6 +132,7 @@ pub struct PackOptions {
     pub rotate_charts: bool,
 }
 
+#[derive(Debug)]
 pub enum ProgressCategory {
     AddMesh,
     ComputeCharts,
@@ -172,6 +176,7 @@ impl<'x> Xatlas<'x> {
     pub fn new() -> Self {
         Self {
             handle: unsafe { xatlas::Create() },
+            progress_callback: None,
             phantom: PhantomData::default(),
         }
     }
@@ -399,6 +404,42 @@ impl<'x> Xatlas<'x> {
 
         unsafe { xatlas::Generate(self.handle, chart_options, pack_options) }
     }
+
+    pub fn set_progress_callback(
+        &mut self,
+        callback: impl Fn(ProgressCategory, i32) -> bool + 'static,
+    ) {
+        let callback: ProgressCallbackPointer = Box::pin(Box::new(callback));
+        let user_data = &*callback as *const _ as *mut _;
+        self.progress_callback = Some(callback);
+
+        unsafe { xatlas::SetProgressCallback(self.handle, Some(progress_callback), user_data) }
+    }
+}
+
+/// Callback type that fits inside of a *void. Note that a single Box would not fit
+/// because it is 128 bits instead of 64
+type ProgressCallbackPointer = Pin<Box<Box<dyn Fn(ProgressCategory, i32) -> bool>>>;
+
+unsafe extern "C" fn progress_callback(
+    category: xatlas::ProgressCategory,
+    progress: std::os::raw::c_int,
+    user_data: *mut std::os::raw::c_void,
+) -> bool {
+    let progress: i32 = progress;
+    let category = match category {
+        xatlas::ProgressCategory_AddMesh => ProgressCategory::AddMesh,
+        xatlas::ProgressCategory_ComputeCharts => ProgressCategory::ComputeCharts,
+        xatlas::ProgressCategory_PackCharts => ProgressCategory::PackCharts,
+        xatlas::ProgressCategory_BuildOutputMeshes => ProgressCategory::BuildOutputMeshes,
+        _ => unreachable!(),
+    };
+
+    let callback: ProgressCallbackPointer = unsafe { mem::transmute(user_data) };
+    let result = callback(category, progress);
+    mem::forget(callback);
+
+    result
 }
 
 fn add_mesh_error_result(add_mesh_error: xatlas::AddMeshError) -> Result<(), AddMeshError> {
