@@ -3,7 +3,7 @@
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use crate::root::xatlas;
-use crate::root::xatlas::{IndexFormat_UInt16, IndexFormat_UInt32};
+use crate::root::xatlas::{IndexFormat_UInt16, IndexFormat_UInt32, ParameterizeFunc};
 use std::ffi::c_void;
 use std::marker::{PhantomData, PhantomPinned};
 use std::ops::Deref;
@@ -62,13 +62,19 @@ pub struct UvMeshDecl<'a> {
 
 #[derive(Debug)]
 pub enum AddMeshError {
-    Error,                  // Unspecified error.
-    IndexOutOfRange,        // An index is >= MeshDecl vertexCount.
-    InvalidFaceVertexCount, // Must be >= 3.
-    InvalidIndexCount,      // Not evenly divisible by 3 - expecting triangles.
+    /// Unspecified error.
+    Error,
+    /// An index is >= MeshDecl vertexCount.
+    IndexOutOfRange,
+    /// Must be >= 3.
+    InvalidFaceVertexCount,
+    /// Not evenly divisible by 3 - expecting triangles.
+    InvalidIndexCount,
 }
 
 pub struct ChartOptions {
+    pub param_func: ParameterizeFunc,
+
     /// Don't grow charts to be larger than this. 0 means no limit.
     pub max_chart_area: f32,
 
@@ -456,7 +462,7 @@ fn add_mesh_error_result(add_mesh_error: xatlas::AddMeshError) -> Result<(), Add
 impl ChartOptions {
     fn convert(&self) -> xatlas::ChartOptions {
         xatlas::ChartOptions {
-            paramFunc: None,
+            paramFunc: self.param_func,
             maxChartArea: self.max_chart_area,
             maxBoundaryLength: self.max_boundary_length,
             normalDeviationWeight: self.normal_deviation_weight,
@@ -475,6 +481,7 @@ impl ChartOptions {
 impl Default for ChartOptions {
     fn default() -> Self {
         ChartOptions {
+            param_func: None,
             max_chart_area: 0.0,
             max_boundary_length: 0.0,
             normal_deviation_weight: 2.0,
