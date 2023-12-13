@@ -4,7 +4,7 @@ use std::path::PathBuf;
 fn main() {
     cc::Build::new()
         .file("vendor/source/xatlas/xatlas.cpp")
-        .std("c++11")
+        .flag("-std=c++11")
         .cpp(true)
         .warnings(false)
         .compile("xatlas");
