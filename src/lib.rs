@@ -1,15 +1,9 @@
-#![allow(unused)]
-
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 use crate::root::xatlas;
 use crate::root::xatlas::{IndexFormat_UInt16, IndexFormat_UInt32, ParameterizeFunc};
-use std::ffi::c_void;
-use std::marker::{PhantomData, PhantomPinned};
-use std::ops::Deref;
-use std::os::fd::AsFd;
+use std::marker::PhantomData;
 use std::pin::Pin;
-use std::ptr::slice_from_raw_parts;
 use std::{mem, slice};
 
 pub struct Xatlas<'x> {
