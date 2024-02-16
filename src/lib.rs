@@ -279,13 +279,13 @@ impl<'x> Xatlas<'x> {
             .collect()
     }
 
-    pub fn add_mesh(&mut self, mesh_decl: &MeshDecl<'x>) -> Result<(), AddMeshError> {
+    pub fn add_mesh(&mut self, mesh_decl: &'x MeshDecl<'x>) -> Result<(), AddMeshError> {
         self.add_mesh_with_mesh_count_hint(mesh_decl, 0)
     }
 
     pub fn add_mesh_with_mesh_count_hint(
         &mut self,
-        mesh_decl: &MeshDecl<'x>,
+        mesh_decl: &'x MeshDecl<'x>,
         mesh_count_hint: u32,
     ) -> Result<(), AddMeshError> {
         let decl = xatlas::MeshDecl {
