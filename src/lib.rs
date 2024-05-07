@@ -593,3 +593,5 @@ impl Drop for Xatlas<'_> {
         }
     }
 }
+
+unsafe impl Send for Xatlas<'_> {}
